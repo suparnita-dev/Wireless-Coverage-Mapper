@@ -1,0 +1,12 @@
+location_id,x,y,signal_dbm,label,is_weak,signal_band
+A-01,0.0,0.0,-52.0,Entrance,False,Good
+A-02,10.0,0.0,-61.0,North corridor,False,Good
+A-03,20.0,0.0,-72.0,East corridor,True,Fair
+B-01,0.0,10.0,-58.0,West corridor,False,Good
+B-02,10.0,10.0,-69.0,Central room,True,Fair
+B-03,20.0,10.0,-78.0,East room,True,Poor
+C-01,0.0,20.0,-63.0,West office,False,Good
+C-02,10.0,20.0,-74.0,Central office,True,Fair
+C-03,20.0,20.0,-83.0,Far office,True,Poor
+D-01,5.0,5.0,-55.0,Meeting room,False,Good
+D-02,15.0,5.0,-71.0,Storage,True,Fair
