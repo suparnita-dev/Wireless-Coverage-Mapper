@@ -1,0 +1,12 @@
+{
+  "input_file": "C:\\Users\\User\\Python_Project2026\\survey_points.csv",
+  "valid_points": 11,
+  "rejected_rows": 1,
+  "weak_points": 6,
+  "weak_rate": 0.5455,
+  "threshold_dbm": -67.0,
+  "grid_bins": [
+    10,
+    10
+  ]
+}

@@ -1,0 +1,7 @@
+location_id,x,y,signal_dbm,label,is_weak
+A-03,20.0,0.0,-72.0,East corridor,True
+B-02,10.0,10.0,-69.0,Central room,True
+B-03,20.0,10.0,-78.0,East room,True
+C-02,10.0,20.0,-74.0,Central office,True
+C-03,20.0,20.0,-83.0,Far office,True
+D-02,15.0,5.0,-71.0,Storage,True

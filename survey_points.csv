@@ -1,0 +1,13 @@
+location_id,x,y,signal_dbm,label
+A-01,0,0,-52,Entrance
+A-02,10,0,-61,North corridor
+A-03,20,0,-72,East corridor
+B-01,0,10,-58,West corridor
+B-02,10,10,-69,Central room
+B-03,20,10,-78,East room
+C-01,0,20,-63,West office
+C-02,10,20,-74,Central office
+C-03,20,20,-83,Far office
+D-01,5,5,-55,Meeting room
+D-02,15,5,-71,Storage
+D-03,,15,-66,Missing coordinate
