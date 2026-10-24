@@ -1,4 +1,4 @@
-"""Wireless-signal coverage analysis for floor or campus survey points."""
+"""Analysis of recorded wireless-signal samples for floor or campus points."""
 
 from __future__ import annotations
 
@@ -19,6 +19,12 @@ MIN_SIGNAL_DBM = -120.0
 MAX_SIGNAL_DBM = 0.0
 DEFAULT_GRID_BINS = (10, 10)
 REQUIRED_COLUMNS = frozenset(("location_id", "x", "y", "signal_dbm"))
+SIGNAL_BANDS = (
+    ("Excellent", -50.0, 0.0),
+    ("Good", -67.0, -50.0),
+    ("Fair", -75.0, -67.0),
+    ("Poor", MIN_SIGNAL_DBM, -75.0),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +53,45 @@ class SurveyPoint:
         """Return whether this point is weaker than the standard -67 dBm threshold."""
 
         return self.signal_dbm < DEFAULT_WEAK_THRESHOLD_DBM
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisResult:
+    """Immutable, reusable result of one survey analysis run."""
+
+    points: list[SurveyPoint]
+    rejected: pd.DataFrame
+    location_comparison: pd.DataFrame
+    weak_points: pd.DataFrame
+    grid_means: np.ndarray
+    x_edges: np.ndarray
+    y_edges: np.ndarray
+    threshold_dbm: float
+
+    @property
+    def frame(self) -> pd.DataFrame:
+        return points_dataframe(self.points, self.threshold_dbm)
+
+    @property
+    def statistics(self) -> dict[str, float | int]:
+        signals = self.frame["signal_dbm"]
+        return {
+            "valid_points": len(self.points),
+            "rejected_rows": len(self.rejected),
+            "locations": int(self.frame["location_id"].nunique()),
+            "mean_dbm": round(float(signals.mean()), 2),
+            "median_dbm": round(float(signals.median()), 2),
+            "std_dbm": round(float(signals.std(ddof=0)), 2),
+            "minimum_dbm": round(float(signals.min()), 2),
+            "maximum_dbm": round(float(signals.max()), 2),
+            "weak_points": len(self.weak_points),
+            "weak_rate": round(float(self.frame["is_weak"].mean()), 4),
+            "measured_cells": int(np.isfinite(self.grid_means).sum()),
+            "grid_cells": int(self.grid_means.size),
+            "measured_cell_rate": round(
+                float(np.isfinite(self.grid_means).sum() / self.grid_means.size), 4
+            ),
+        }
 
 
 def _is_weak(signal_dbm: float, threshold_dbm: float) -> bool:
@@ -213,6 +258,106 @@ def weak_zones(
     return frame.loc[frame["is_weak"]].reset_index(drop=True)
 
 
+def signal_band(signal_dbm: float) -> str:
+    """Classify a measured RSSI into an engineering-friendly signal band."""
+
+    for name, lower, upper in SIGNAL_BANDS:
+        if lower <= signal_dbm < upper or name == "Excellent" and signal_dbm == upper:
+            return name
+    raise ValueError(f"signal_dbm is outside supported range: {signal_dbm}")
+
+
+def analyse_points(
+    points: Iterable[SurveyPoint],
+    rejected: pd.DataFrame | None = None,
+    threshold_dbm: float = DEFAULT_WEAK_THRESHOLD_DBM,
+    bins: tuple[int, int] = DEFAULT_GRID_BINS,
+) -> AnalysisResult:
+    """Compute all reusable measurements and estimates without writing files."""
+
+    point_list = list(points)
+    if not point_list:
+        raise ValueError("at least one valid survey point is required")
+    if not math.isfinite(threshold_dbm):
+        raise ValueError("threshold_dbm must be finite")
+    means, x_edges, y_edges = grid_summary(point_list, bins)
+    return AnalysisResult(
+        points=point_list,
+        rejected=rejected if rejected is not None else pd.DataFrame(),
+        location_comparison=compare_locations(point_list, threshold_dbm),
+        weak_points=weak_zones(point_list, threshold_dbm),
+        grid_means=means,
+        x_edges=x_edges,
+        y_edges=y_edges,
+        threshold_dbm=threshold_dbm,
+    )
+
+
+def write_report(result: AnalysisResult, output_dir: str | Path, input_name: str) -> None:
+    """Write portable CSV, JSON, Markdown, NumPy, and image report artifacts."""
+
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    result.location_comparison.to_csv(output / "location_comparison.csv", index=False)
+    result.rejected.to_csv(output / "rejected_rows.csv", index=False)
+    result.weak_points.to_csv(output / "weak_zones.csv", index=False)
+    result.frame.assign(signal_band=result.frame["signal_dbm"].map(signal_band)).to_csv(
+        output / "validated_points.csv", index=False
+    )
+    grid_dataframe(result.grid_means, result.x_edges, result.y_edges).to_csv(
+        output / "grid_summary.csv", index=False
+    )
+    np.savez(
+        output / "grid_summary.npz",
+        mean_signal=result.grid_means,
+        x_edges=result.x_edges,
+        y_edges=result.y_edges,
+    )
+    plot_signal_map(result.points, output / "signal_map.png", result.threshold_dbm)
+    plot_signal_histogram(result.points, output / "signal_histogram.png", result.threshold_dbm)
+    plot_grid_heatmap(
+        result.grid_means,
+        result.x_edges,
+        result.y_edges,
+        output / "grid_heatmap.png",
+        result.threshold_dbm,
+    )
+    summary = {
+        "input_file": input_name,
+        "threshold_dbm": result.threshold_dbm,
+        "grid_bins": [len(result.x_edges) - 1, len(result.y_edges) - 1],
+        **result.statistics,
+    }
+    (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    weakest = result.location_comparison.iloc[0]
+    report = f"""# Wireless coverage analysis report
+
+> This report analyses recorded CSV sample data only. It does not represent
+> live or real-world network measurements unless the user supplies and
+> documents those measurements separately.
+
+## Executive summary
+
+- Input: `{input_name}`
+- Valid measured points: **{result.statistics["valid_points"]}**
+- Rejected rows: **{result.statistics["rejected_rows"]}**
+- Weak threshold: **{result.threshold_dbm:g} dBm**
+- Weak measured points: **{result.statistics["weak_points"]}**
+  (**{result.statistics["weak_rate"]:.2%}**)
+- Weakest measured location: **{weakest["location_id"]} ({weakest["mean_dbm"]:.1f} dBm)**
+- Grid cells with measurements: **{result.statistics["measured_cell_rate"]:.2%}**
+
+## Engineering interpretation
+
+RSSI values are measured samples. Grid-cell means are spatial summaries, not
+direct measurements of every location inside a cell. Empty cells remain
+unmeasured and are not treated as weak. The -67 dBm threshold is a practical
+planning boundary; production designs should replace it with the application's
+validated service-level target.
+"""
+    (output / "analysis_report.md").write_text(report, encoding="utf-8")
+
+
 def plot_signal_map(
     points: Iterable[SurveyPoint],
     output_path: str | Path,
@@ -348,36 +493,11 @@ def analyse(
         raise ValueError("the input contains no valid survey points")
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
-    comparison = compare_locations(points, threshold_dbm)
-    comparison.to_csv(output / "location_comparison.csv", index=False)
-    rejected.to_csv(output / "rejected_rows.csv", index=False)
-    weak = weak_zones(points, threshold_dbm)
-    weak.to_csv(output / "weak_zones.csv", index=False)
-    plot_signal_map(points, output / "signal_map.png", threshold_dbm)
-    plot_signal_histogram(points, output / "signal_histogram.png", threshold_dbm)
-    means, x_edges, y_edges = grid_summary(points, bins)
-    np.savez(output / "grid_summary.npz", mean_signal=means, x_edges=x_edges, y_edges=y_edges)
-    grid_dataframe(means, x_edges, y_edges).to_csv(output / "grid_summary.csv", index=False)
-    plot_grid_heatmap(
-        means,
-        x_edges,
-        y_edges,
-        output / "grid_heatmap.png",
-        threshold_dbm,
-    )
-    summary = {
-        "input_file": str(Path(input_path).resolve()),
-        "valid_points": len(points),
-        "rejected_rows": len(rejected),
-        "weak_points": len(weak),
-        "weak_rate": round(len(weak) / len(points), 4),
-        "threshold_dbm": threshold_dbm,
-        "grid_bins": list(bins),
-    }
-    (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-    print(f"Valid points: {len(points)}")
-    print(f"Rejected rows: {len(rejected)}")
-    print(f"Weak points (< {threshold_dbm:g} dBm): {len(weak)}")
+    result = analyse_points(points, rejected, threshold_dbm, bins)
+    write_report(result, output, str(Path(input_path).resolve()))
+    print(f"Valid points: {result.statistics['valid_points']}")
+    print(f"Rejected rows: {result.statistics['rejected_rows']}")
+    print(f"Weak points (< {threshold_dbm:g} dBm): {result.statistics['weak_points']}")
     print(f"Results written to {output.resolve()}")
 
 

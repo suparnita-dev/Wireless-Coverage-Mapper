@@ -3,12 +3,15 @@ import pytest
 
 from signal_mapper import (
     SurveyPoint,
+    analyse_points,
     compare_locations,
     grid_dataframe,
     grid_summary,
     load_survey_csv,
     pairwise_distances,
+    signal_band,
     weak_zones,
+    write_report,
 )
 
 
@@ -72,3 +75,16 @@ def test_custom_threshold_is_used_consistently():
 
     assert comparison["weak_rate"].tolist() == [1.0, 1.0]
     assert len(weak_zones(points, threshold_dbm=-65)) == 2
+
+
+def test_analysis_result_and_report_outputs(tmp_path):
+    points = [SurveyPoint("a", 0, 0, -55), SurveyPoint("b", 10, 10, -80)]
+    result = analyse_points(points, threshold_dbm=-67, bins=(2, 2))
+
+    assert result.statistics["weak_points"] == 1
+    assert signal_band(-55) == "Good"
+    write_report(result, tmp_path, "sample.csv")
+    assert (tmp_path / "analysis_report.md").exists()
+    assert (tmp_path / "summary.json").exists()
+    assert (tmp_path / "grid_heatmap.png").exists()
+    assert (tmp_path / "validated_points.csv").exists()

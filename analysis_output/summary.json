@@ -1,12 +1,21 @@
 {
   "input_file": "C:\\Users\\User\\Python_Project2026\\survey_points.csv",
-  "valid_points": 11,
-  "rejected_rows": 1,
-  "weak_points": 6,
-  "weak_rate": 0.5455,
   "threshold_dbm": -67.0,
   "grid_bins": [
-    10,
-    10
-  ]
+    5,
+    5
+  ],
+  "valid_points": 11,
+  "rejected_rows": 1,
+  "locations": 11,
+  "mean_dbm": -66.91,
+  "median_dbm": -69.0,
+  "std_dbm": 9.4,
+  "minimum_dbm": -83.0,
+  "maximum_dbm": -52.0,
+  "weak_points": 6,
+  "weak_rate": 0.5455,
+  "measured_cells": 11,
+  "grid_cells": 25,
+  "measured_cell_rate": 0.44
 }
