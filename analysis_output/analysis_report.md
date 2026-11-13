@@ -6,14 +6,14 @@
 
 ## Executive summary
 
-- Input: `C:\Users\User\Python_Project2026\survey_points.csv`
+- Input: `/Users/abhrakantibiswas/Downloads/Wireless-Coverage-Mapper/survey_points.csv`
 - Valid measured points: **11**
 - Rejected rows: **1**
 - Weak threshold: **-67 dBm**
 - Weak measured points: **6**
   (**54.55%**)
 - Weakest measured location: **C-03 (-83.0 dBm)**
-- Grid cells with measurements: **44.00%**
+- Grid cells with measurements: **11.00%**
 
 ## Engineering interpretation
 
